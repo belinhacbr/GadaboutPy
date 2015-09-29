@@ -3,7 +3,7 @@ from collections import deque
 class Crawler():
 
 	def __init__(self, urlsFileName):
-		self.urls = list() #queue
+		self.urls = deque() #queue
 		self.seenUrls = list()
 		self.dispatch(urlsFileName)
 
@@ -33,9 +33,10 @@ class Crawler():
 		return r.text
 
 	def getHyperlinks(self, urlContent):
+		#TODO
 		#TODO check page robots.txt
 		return list()
-		
+
 	def saveUrlContent(self, url, urlContent):
 		urlFileName = url.replace('/', '').replace(':', '').replace('\"', '').replace('*', '').replace('<', '').replace('>', '').replace('|', '');
 		f = open('fetchedPages/'+urlFileName+".html", 'w')
