@@ -1,6 +1,6 @@
 import logging
 
-
+#TODO PEP 0008
 #TODO remove global create URLManager
 queued_urls = list() #TODO queue
 seen_urls = list()
@@ -34,14 +34,11 @@ class Fetcher():
 	def run(self):
 		global queued_urls
 		global seen_urls
-		print(queued_urls)
 		while queued_urls: 
 			url = queued_urls.pop()
-			print(seen_urls)
-			if url not in seen_urls:
-				urlDNS = self.DNS_cache.getDNS(url)
-				if urlDNS.can_fetch:
-					self.fetch(url)
+			urlDNS = self.DNS_cache.getDNS(url)
+			if url not in seen_urls and urlDNS.can_fetch:
+				self.fetch(url)
 
 	def fetch(self, url):
 		global seen_urls
