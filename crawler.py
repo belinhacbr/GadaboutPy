@@ -1,18 +1,46 @@
 import logging
 
 #TODO PEP 0008
-#TODO remove global create URLManager
-queued_urls = list() #TODO queue
-seen_urls = list()
+
+def singleton(cls):
+    instances = {}
+    def getinstance():
+        if cls not in instances:
+            instances[cls] = cls()
+        return instances[cls]
+    return getinstance
+
+@singleton
+class URLManager():
+	def __init__(self):
+		self.queued_urls = list() #TODO queue
+		self.seen_urls = list() #TODO hash
+
+	def initQueuedUrls(self, urls):
+		self.queued_urls = urls
+
+	def addToQueuedUrls(self, url):
+		self.queued_urls.append(url)
+
+	def addToSeenUrls(self, url):
+		self.seen_urls.append(url)
+
+	def hasNextQueuedURL(self):
+		return bool(self.queued_urls)
+
+	def nextQueuedURL(self):
+		return self.queued_urls.pop()
+
+	def seen(self, url):
+		return url in self.seen_urls
 
 class Crawler():
-	def __init__(self, urlsFileName):
-		Dispatcher(urlsFileName)
+	def __init__(self):
+		Dispatcher('seed')
 
 class Dispatcher():
 	def __init__(self, urlsFileName):
-		global queued_urls
-		queued_urls = self.getUrls(urlsFileName)
+		URLManager().initQueuedUrls(self.getUrls(urlsFileName))
 		self.threads = 8
 		self.dispatch()
 
@@ -20,32 +48,27 @@ class Dispatcher():
 		Fetcher()
 
 	def getUrls(self, urlsFileName):
-		#adds every url in the file to the url queue
 		with open(urlsFileName) as f:
 			initial_urls = f.read().splitlines()
 		return initial_urls
 
 class Fetcher():
 	def __init__(self):
-		self.DNS_cache = DNSCache()
-		logging.info('RUN Fetcher RUN!!!')
 		self.run()
 	
 	def run(self):
-		global queued_urls
-		global seen_urls
-		while queued_urls: 
-			url = queued_urls.pop()
-			urlDNS = self.DNS_cache.getDNS(url)
-			if url not in seen_urls and urlDNS.can_fetch:
+		logging.info('RUN Fetcher RUN!!!')
+		while URLManager().hasNextQueuedURL(): 
+			url = URLManager().nextQueuedURL()
+			urlDNS = DNSCache().getDNS(url)
+			if not URLManager().seen(url) and urlDNS.can_fetch:
 				self.fetch(url)
 
 	def fetch(self, url):
-		global seen_urls
 		logging.info('Fetching url ' + url + ' ...')
 		urlContent = self.getHTMLPage(url)
 		self.saveUrlContent(url, urlContent)
-		seen_urls.append(url)
+		URLManager().addToSeenUrls(url)
 		Parser(urlContent) #fetcher dies
 
 	def getHTMLPage(self, url):
@@ -84,7 +107,7 @@ class Parser():
 		hyperlinks.append()
 		return hyperlinks
 
-
+@singleton
 class DNSCache():
 	def __init__(self):
 		self.knownDNS = {}
@@ -121,4 +144,4 @@ class DNSResolver():
 
 
 logging.basicConfig(filename='log/crawler.log', level=logging.INFO)
-Crawler('seed')
+Crawler()
