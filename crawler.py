@@ -77,6 +77,7 @@ class Fetcher():
 		return r.text
 
 	def saveUrlContent(self, url, urlContent):
+		#TODO insert in db
 		urlFileName = url.replace('/', '').replace(':', '').replace('\"', '').replace('*', '').replace('<', '').replace('>', '').replace('|', '');
 		f = open('fetchedPages/'+urlFileName+".html", 'wb')
 		f.write(urlContent.encode('utf-8'))
@@ -143,5 +144,6 @@ class DNSResolver():
 		return rp.can_fetch("*", url)
 
 
-logging.basicConfig(filename='log/crawler.log', level=logging.INFO)
-Crawler()
+if __name__ == '__main__':
+	logging.basicConfig(filename='log/crawler.log', level=logging.INFO)
+	Crawler()
