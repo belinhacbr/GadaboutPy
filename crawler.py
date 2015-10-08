@@ -1,149 +1,164 @@
 import logging
+import socket
+import urllib.robotparser as robotparser
+from urllib.parse import urlsplit
 
-#TODO PEP 0008
+import requests
+
 
 def singleton(cls):
     instances = {}
-    def getinstance():
+
+    def get_instance():
         if cls not in instances:
             instances[cls] = cls()
         return instances[cls]
-    return getinstance
+    return get_instance
+
 
 @singleton
 class URLManager():
-	def __init__(self):
-		self.queued_urls = list() #TODO queue
-		self.seen_urls = list() #TODO hash
 
-	def initQueuedUrls(self, urls):
-		self.queued_urls = urls
+    def __init__(self):
+        self.queued_urls = list()  # TODO queue
+        self.seen_urls = list()  # TODO hash
 
-	def addToQueuedUrls(self, url):
-		self.queued_urls.append(url)
+    def init_queued_urls(self, urls):
+        self.queued_urls = urls
 
-	def addToSeenUrls(self, url):
-		self.seen_urls.append(url)
+    def add_to_queued_urls(self, url):
+        self.queued_urls.append(url)
 
-	def hasNextQueuedURL(self):
-		return bool(self.queued_urls)
+    def add_to_seen_urls(self, url):
+        self.seen_urls.append(url)
 
-	def nextQueuedURL(self):
-		return self.queued_urls.pop()
+    def has_next_queued_url(self):
+        return bool(self.queued_urls)
 
-	def seen(self, url):
-		return url in self.seen_urls
+    def next_queued_url(self):
+        return self.queued_urls.pop()
+
+    def seen(self, url):
+        return url in self.seen_urls
+
 
 class Crawler():
-	def __init__(self):
-		Dispatcher('seed')
+
+    def __init__(self):
+        Dispatcher('seed')
+
 
 class Dispatcher():
-	def __init__(self, urlsFileName):
-		URLManager().initQueuedUrls(self.getUrls(urlsFileName))
-		self.threads = 8
-		self.dispatch()
 
-	def dispatch(self):
-		Fetcher()
+    def __init__(self, urlsFileName):
+        URLManager().init_queued_urls(self.get_urls(urlsFileName))
+        self.threads = 8
+        self.dispatch()
 
-	def getUrls(self, urlsFileName):
-		with open(urlsFileName) as f:
-			initial_urls = f.read().splitlines()
-		return initial_urls
+    def dispatch(self):
+        Fetcher()
+
+    def get_urls(self, urlsFileName):
+        with open(urlsFileName) as f:
+            initial_urls = f.read().splitlines()
+        return initial_urls
+
 
 class Fetcher():
-	def __init__(self):
-		self.run()
-	
-	def run(self):
-		logging.info('RUN Fetcher RUN!!!')
-		while URLManager().hasNextQueuedURL(): 
-			url = URLManager().nextQueuedURL()
-			urlDNS = DNSCache().getDNS(url)
-			if not URLManager().seen(url) and urlDNS.can_fetch:
-				self.fetch(url)
 
-	def fetch(self, url):
-		logging.info('Fetching url ' + url + ' ...')
-		urlContent = self.getHTMLPage(url)
-		self.saveUrlContent(url, urlContent)
-		URLManager().addToSeenUrls(url)
-		Parser(urlContent) #fetcher dies
+    def __init__(self):
+        self.run()
 
-	def getHTMLPage(self, url):
-		import requests
-		r = requests.get(url)
-		return r.text
+    def run(self):
+        logging.info('RUN Fetcher RUN!!!')
+        while URLManager().has_next_queued_url():
+            url = URLManager().next_queued_url()
+            urlDNS = DNSCache().get_dns(url)
+            if not URLManager().seen(url) and urlDNS.can_fetch:
+                self.fetch(url)
 
-	def saveUrlContent(self, url, urlContent):
-		#TODO insert in db
-		urlFileName = url.replace('/', '').replace(':', '').replace('\"', '').replace('*', '').replace('<', '').replace('>', '').replace('|', '');
-		f = open('fetchedPages/'+urlFileName+".html", 'wb')
-		f.write(urlContent.encode('utf-8'))
+    def fetch(self, url):
+        logging.info('Fetching url ' + url + ' ...')
+        urlContent = self.get_html_page(url)
+        self.save_url_content(url, urlContent)
+        URLManager().add_to_seen_urls(url)
+        Parser(urlContent)  # fetcher dies
+
+    def get_html_page(self, url):
+        r = requests.get(url)
+        return r.text
+
+    def save_url_content(self, url, urlContent):
+        # TODO insert in db
+        urlFileName = url.replace('/', '').replace(':', '').replace('\"', '').replace(
+            '*', '').replace('<', '').replace('>', '').replace('|', '')
+        f = open('fetchedPages/' + urlFileName + ".html", 'wb')
+        f.write(urlContent.encode('utf-8'))
+
 
 class Parser():
-	def __init__(self, urlContent):
-		self.urlContent = urlContent
-		self.parse()
 
-	def parse(self):
-		if self.checkHeader(self.urlContent):
-			hyperlinks = self.getHyperlinks(self.urlContent)
-			#queued_urls.append(hyperlinks)
+    def __init__(self, urlContent):
+        self.urlContent = urlContent
+        self.parse()
 
-	def checkHeader(self, urlContent):
-		#TODO check if header can match the rules
-		#TODO check page META ROBOTS
-		#pyquery
-		return False
+    def parse(self):
+        if self.check_header(self.urlContent):
+            hyperlinks = self.get_hyperlinks(self.urlContent)
+            # queued_urls.append(hyperlinks)
 
+    def check_header(self, urlContent):
+        # TODO check if header can match the rules
+        # TODO check page META ROBOTS
+        # pyquery
+        return False
 
-	def getHyperlinks(self, urlContent):
-		hyperlinks = list() #set
-		#TODO
-		#clean the urls
-		from urllib.parse import urlsplit
-		urlHyperlink = urlsplit(url).geturl()
-		hyperlinks.append()
-		return hyperlinks
+    def get_hyperlinks(self, urlContent):
+        hyperlinks = list()  # set
+        # TODO
+        # clean the urls
+        urlHyperlink = urlsplit(url).geturl()
+        hyperlinks.append()
+        return hyperlinks
+
 
 @singleton
 class DNSCache():
-	def __init__(self):
-		self.knownDNS = {}
 
-	def getDNS(self, url):
-		from urllib.parse import urlsplit
-		host = urlsplit(url).hostname
-		if host in self.knownDNS:
-			logging.info('DNS cache hit for: ' + host)
-			return self.knownDNS[host]
-		else:
-			newDNS = DNSResolver(url)
-			self.knownDNS[host] = newDNS
-			return newDNS
+    def __init__(self):
+        self.knownDNS = {}
+
+    def get_dns(self, url):
+
+        host = urlsplit(url).hostname
+        if host in self.knownDNS:
+            logging.info('DNS cache hit for: ' + host)
+            return self.knownDNS[host]
+        else:
+            newDNS = DNSResolver(url)
+            self.knownDNS[host] = newDNS
+            return newDNS
+
 
 class DNSResolver():
-	def __init__(self, url):
-		self.ip = self.getIP(url)
-		self.can_fetch = self.getRobot(url)
-		logging.info(url + '[ IP:' + self.ip + ', can_fetch: '+ str(self.can_fetch) + ']')
 
-	def getIP(self, url):
-		import socket
-		from urllib.parse import urlsplit
-		hostname = urlsplit(url).hostname
-		return socket.gethostbyname(hostname)
+    def __init__(self, url):
+        self.ip = self.get_ip(url)
+        self.can_fetch = self.get_robot(url)
+        logging.info(url + '[ IP:' + self.ip +
+                     ', can_fetch: ' + str(self.can_fetch) + ']')
 
-	def getRobot(self, url):
-		import urllib.robotparser as robotparser
-		rp = robotparser.RobotFileParser()
-		rp.set_url(url)
-		rp.read()
-		return rp.can_fetch("*", url)
+    def get_ip(self, url):
+        hostname = urlsplit(url).hostname
+        return socket.gethostbyname(hostname)
+
+    def get_robot(self, url):
+        rp = robotparser.RobotFileParser()
+        rp.set_url(url)
+        rp.read()
+        return rp.can_fetch("*", url)
 
 
 if __name__ == '__main__':
-	logging.basicConfig(filename='log/crawler.log', level=logging.INFO)
-	Crawler()
+    logging.basicConfig(filename='log/crawler.log', level=logging.INFO)
+    Crawler()
