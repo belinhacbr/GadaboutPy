@@ -1,9 +1,11 @@
 import logging
 import socket
 import urllib.robotparser as robotparser
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urljoin, urldefrag
+from collections import deque
 
 import requests
+from pyquery import PyQuery as pq
 
 
 def singleton(cls):
@@ -16,27 +18,39 @@ def singleton(cls):
     return get_instance
 
 
+class Page():
+
+    def __init__(self, url):
+        self.url = url
+        self.url_content = None
+        self.can_index = True
+        self.can_follow = True
+
+    def add_url_content(self, url_content):
+        self.url_content = url_content
+
+
 @singleton
 class URLManager():
 
     def __init__(self):
-        self.queued_urls = list()  # TODO queue
-        self.seen_urls = list()  # TODO hash
+        self.queued_urls = deque([])
+        self.seen_urls = set()
 
     def init_queued_urls(self, urls):
         self.queued_urls = urls
 
-    def add_to_queued_urls(self, url):
-        self.queued_urls.append(url)
+    def add_to_queued_urls(self, new_urls):
+        self.queued_urls.extend(new_urls)
 
     def add_to_seen_urls(self, url):
-        self.seen_urls.append(url)
+        self.seen_urls.add(url)
 
     def has_next_queued_url(self):
         return bool(self.queued_urls)
 
     def next_queued_url(self):
-        return self.queued_urls.pop()
+        return self.queued_urls.popleft()
 
     def seen(self, url):
         return url in self.seen_urls
@@ -50,17 +64,19 @@ class Crawler():
 
 class Dispatcher():
 
-    def __init__(self, urlsFileName):
-        URLManager().init_queued_urls(self.get_urls(urlsFileName))
+    def __init__(self, urls_file_name):
+        URLManager().init_queued_urls(self.get_urls(urls_file_name))
         self.threads = 8
         self.dispatch()
 
     def dispatch(self):
+        # TODO threads
         Fetcher()
 
-    def get_urls(self, urlsFileName):
-        with open(urlsFileName) as f:
-            initial_urls = f.read().splitlines()
+    def get_urls(self, urls_file_name):
+        initial_urls = deque([])
+        with open(urls_file_name) as f:
+            initial_urls.extend(f.read().splitlines())
         return initial_urls
 
 
@@ -72,54 +88,78 @@ class Fetcher():
     def run(self):
         logging.info('RUN Fetcher RUN!!!')
         while URLManager().has_next_queued_url():
+            print(str(len(URLManager().queued_urls)) + ' queued_urls remaining')
             url = URLManager().next_queued_url()
-            urlDNS = DNSCache().get_dns(url)
-            if not URLManager().seen(url) and urlDNS.can_fetch:
+            url_dns = DNSCache().get_dns(url)
+            if not URLManager().seen(url) and url_dns.can_fetch:
                 self.fetch(url)
 
     def fetch(self, url):
         logging.info('Fetching url ' + url + ' ...')
-        urlContent = self.get_html_page(url)
-        self.save_url_content(url, urlContent)
+        page = self.get_html_page(url)
         URLManager().add_to_seen_urls(url)
-        Parser(urlContent)  # fetcher dies
+        print(str(len(URLManager().seen_urls)) + ' pages seen')
+        Parser(page)
+        if page.can_index:
+            self.save_url_content(page)
 
     def get_html_page(self, url):
-        r = requests.get(url)
-        return r.text
+        page = Page(url)
+        url_content = requests.get(url).text
+        page.add_url_content(url_content)
+        return page
 
-    def save_url_content(self, url, urlContent):
+    def save_url_content(self, page):
         # TODO insert in db
-        urlFileName = url.replace('/', '').replace(':', '').replace('\"', '').replace(
-            '*', '').replace('<', '').replace('>', '').replace('|', '')
-        f = open('fetchedPages/' + urlFileName + ".html", 'wb')
-        f.write(urlContent.encode('utf-8'))
+        url = urlsplit(page.url)
+        urlFileName = (url.hostname + url.path).replace('/', '').replace('.', '')
+        f = open('fetchedPages/' + urlFileName + '.html', 'wb')
+        f.write(page.url_content.encode('utf-8'))
+        f.close()
 
 
 class Parser():
 
-    def __init__(self, urlContent):
-        self.urlContent = urlContent
+    def __init__(self, page):
+        self.page = page
         self.parse()
 
     def parse(self):
-        if self.check_header(self.urlContent):
-            hyperlinks = self.get_hyperlinks(self.urlContent)
-            # queued_urls.append(hyperlinks)
+        self.check_header()
+        if self.page.can_follow:
+            hyperlinks = self.get_hyperlinks()
+            print('' + str(len(hyperlinks)) + ' links added to queued_urls')
+            URLManager().add_to_queued_urls(hyperlinks)
 
-    def check_header(self, urlContent):
-        # TODO check if header can match the rules
-        # TODO check page META ROBOTS
-        # pyquery
-        return False
+    def check_header(self):
+        meta = pq(self.page.url_content)('meta[name="robots"]')  # checks the meta tag robots
+        if meta:
+            print(meta)
+            print(meta.attrib['content'])
+            metaContent = (meta.attrib['content'].text).upper()
+            if 'NOINDEX' in metaContent:
+                page.can_index = False
+            if 'NOFOLLOW' in metaContent:
+                page.can_follow = False
 
-    def get_hyperlinks(self, urlContent):
-        hyperlinks = list()  # set
-        # TODO
-        # clean the urls
-        urlHyperlink = urlsplit(url).geturl()
-        hyperlinks.append()
+    def get_hyperlinks(self):
+        hyperlinks = set()
+        anchors = pq(self.page.url_content)('a')
+        # for every href in the page, clean the urls and put in a list
+        for a in anchors:
+            if 'href' in a.attrib:
+                hyperlinks.add(self.clean_url(a.attrib['href']))
         return hyperlinks
+
+    def clean_url(self, hyperlink):
+        if self.is_absolute(hyperlink):
+            href_url = urlsplit(hyperlink).geturl()
+        else:
+            href_url = urldefrag(urlsplit(urljoin(self.page.url, hyperlink)).geturl()).url
+        return href_url
+
+    def is_absolute(self, hyperlink):
+        return bool(urlsplit(hyperlink).netloc)
 
 
 @singleton
@@ -129,7 +169,6 @@ class DNSCache():
         self.knownDNS = {}
 
     def get_dns(self, url):
-
         host = urlsplit(url).hostname
         if host in self.knownDNS:
             logging.info('DNS cache hit for: ' + host)
