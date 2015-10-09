@@ -25,6 +25,7 @@ class Page():
         self.url_content = None
         self.can_index = True
         self.can_follow = True
+        self.can_archive = True
 
     def add_url_content(self, url_content):
         self.url_content = url_content
@@ -98,9 +99,8 @@ class Fetcher():
         logging.info('Fetching url ' + url + ' ...')
         page = self.get_html_page(url)
         URLManager().add_to_seen_urls(url)
-        print(str(len(URLManager().seen_urls)) + ' pages seen')
         Parser(page)
-        if page.can_index:
+        if page.can_archive:
             self.save_url_content(page)
 
     def get_html_page(self, url):
@@ -111,6 +111,7 @@ class Fetcher():
 
     def save_url_content(self, page):
         # TODO insert in db
+        print(str(len(URLManager().seen_urls)) + ' pages seen')
         url = urlsplit(page.url)
         urlFileName = (url.hostname + url.path).replace('/', '').replace('.', '')
         f = open('fetchedPages/' + urlFileName + '.html', 'wb')
@@ -134,13 +135,13 @@ class Parser():
     def check_header(self):
         meta = pq(self.page.url_content)('meta[name="robots"]')  # checks the meta tag robots
         if meta:
-            print(meta)
-            print(meta.attrib['content'])
-            metaContent = (meta.attrib['content'].text).upper()
+            metaContent = (meta.attr['content']).upper()
             if 'NOINDEX' in metaContent:
-                page.can_index = False
+                self.page.can_index = False
             if 'NOFOLLOW' in metaContent:
-                page.can_follow = False
+                self.page.can_follow = False
+            if 'NOARCHIVE' in metaContent:
+                self.page.can_archive = False
 
     def get_hyperlinks(self):
         hyperlinks = set()
@@ -188,14 +189,20 @@ class DNSResolver():
                      ', can_fetch: ' + str(self.can_fetch) + ']')
 
     def get_ip(self, url):
-        hostname = urlsplit(url).hostname
-        return socket.gethostbyname(hostname)
+        try:
+            hostname = urlsplit(url).hostname
+            return socket.gethostbyname(hostname)
+        except:  # TODO
+            logging.debug('get_ip for ' + url + ' FAILED')
 
     def get_robot(self, url):
-        rp = robotparser.RobotFileParser()
-        rp.set_url(url)
-        rp.read()
-        return rp.can_fetch("*", url)
+        try:
+            rp = robotparser.RobotFileParser()
+            rp.set_url(url)
+            rp.read()
+            return rp.can_fetch("*", url)
+        except:  # TODO
+            logging.debug('get_robot for ' + url + ' FAILED')
 
 
 if __name__ == '__main__':
